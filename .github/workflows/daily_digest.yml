@@ -24,6 +24,7 @@ jobs:
 
       - name: Run automation script
         env:
+          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
           EMAIL_USER: ${{ secrets.EMAIL_USER }}
           EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
