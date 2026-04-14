@@ -123,7 +123,7 @@ def send_email(videos):
     msg.add_alternative(html_content, subtype='html')
 
     with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
-        server.login(EMAIL_USER, EMAIL_PASSWORD)
+        server.login(EMAIL_USER, EMAIL_PASS)
         server.send_message(msg)
 
 if __name__ == '__main__':
