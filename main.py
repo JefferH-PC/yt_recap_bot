@@ -9,106 +9,120 @@ EMAIL_USER = os.getenv('EMAIL_USER')
 EMAIL_PASS = os.getenv('EMAIL_PASS')
 RECIPIENT_EMAIL = os.getenv('EMAIL_USER')
 
-def get_yesterday_date():
-    yesterday = datetime.datetime.today() - datetime.timedelta(days=1)
-    start_time = datetime.datetime.combine(yesterday, datetime.time.min).isoformat() + "Z"
-    end_time = datetime.datetime.combine(yesterday, datetime.time.max).isoformat() + "Z"
-    return start_time, end_time
+
+def get_date_bounds():
+    today = datetime.datetime.today()
+    yesterday = today - datetime.timedelta(days=1)
+    day_before_yesterday = today - datetime.timedelta(days=2)
+
+    start_yesterday = datetime.datetime.combine(yesterday, datetime.time.min).isoformat() + "Z"
+    end_yesterday = datetime.datetime.combine(yesterday, datetime.time.max).isoformat() + "Z"
+
+    cutoff_time = datetime.datetime.combine(day_before_yesterday, datetime.time.max).isoformat() + "Z"
+
+    return start_yesterday, end_yesterday, cutoff_time
 
 
 def fetch_videos():
     youtube = build('youtube', 'v3', developerKey=API_KEY)
-    start_time, end_time = get_yesterday_date()
+    start_yesterday, end_yesterday, cutoff_time = get_date_bounds()
     all_videos = []
+
+    if not os.path.exists('channels.txt'):
+        print("channels.txt not found.")
+        return []
 
     with open('channels.txt', 'r') as f:
         channels_ids = [line.strip() for line in f if line.strip()]
 
     for channel_id in channels_ids:
-        channel_response = youtube.channels().list(
-            part='contentDetails',
-            id=channel_id
-        ).execute()
+        next_page_token = None
+        should_stop_channel = False
 
-        if not channel_response.get('items'):
-            continue
+        while not should_stop_channel:
+            response = youtube.activities().list(
+                part='snippet,contentDetails',
+                channelId=channel_id,
+                maxResults=10,
+                pageToken=next_page_token
+            ).execute()
 
-        uploads_id = channel_response['items'][0]['contentDetails']['relatedPlaylists']['uploads']
+            if not response.get('items'):
+                break
 
-        playlist_response = youtube.playlistItems().list(
-            part='snippet',
-            playlistId=uploads_id,
-            maxResults=10
-        ).execute()
+            for item in response['items']:
+                if item['snippet']['type'] != 'upload':
+                    continue
 
-        for item in playlist_response.get('items', []):
-            published_at = item['snippet']['publishedAt']
+                published_at = item['snippet']['publishedAt']
+                video_id = item['contentDetails']['upload']['videoId']
 
-            if start_time <= published_at <= end_time:
-                all_videos.append({
-                    'title': item['snippet']['title'],
-                    'url': f"https://www.youtube.com/watch?v={item['snippet']['resourceId']['videoId']}",
-                    'thumb': item['snippet']['thumbnails']['medium']['url'],
-                    'channel': item['snippet']['channelTitle'],
-                })
+                if published_at <= cutoff_time:
+                    should_stop_channel = True
+                    break
+
+                if start_yesterday <= published_at <= end_yesterday:
+                    all_videos.append({
+                        'title': item['snippet']['title'],
+                        'url': f"https://www.youtube.com/watch?v={video_id}",
+                        'thumb': item['snippet']['thumbnails']['medium']['url'],
+                        'channel': item['snippet']['channelTitle'],
+                    })
+
+            next_page_token = response.get('nextPageToken')
+            if not next_page_token:
+                break
+
     return all_videos
 
+
 def send_email(videos):
+    count = len(videos)
+    date_str = (datetime.datetime.now() - datetime.timedelta(days=1)).strftime('%d.%m.%Y')
+
     msg = EmailMessage()
-    msg['Subject'] = f"Youtube Recap - {(datetime.datetime.now() - datetime.timedelta(days=1)).strftime('%d.%m.%Y')}"
+    msg['Subject'] = f"Youtube Recap - {date_str}"
     msg['From'] = EMAIL_USER
     msg['To'] = RECIPIENT_EMAIL
 
     html_content = f"""
     <!DOCTYPE html>
     <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    </head>
-    <body style="margin: 0; padding: 0; background-color: #f4f4f4; font-family: 'Segoe UI', Arial, sans-serif;">
+    <body style="margin: 0; padding: 0; background-color: #f4f4f4; font-family: Arial, sans-serif;">
         <table border="0" cellpadding="0" cellspacing="0" width="100%">
             <tr>
                 <td align="center" style="padding: 20px 0;">
-                    <table border="0" cellpadding="0" cellspacing="0" width="600" style="background-color: #ffffff; border-radius: 8px; overflow: hidden; border: 1px solid #dee2e6; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-
+                    <table border="0" cellpadding="0" cellspacing="0" width="600" style="background-color: #ffffff; border-radius: 8px; border: 1px solid #dee2e6;">
                         <tr>
-                            <td align="center" style="background-color: #343a40; padding: 30px 20px; border-bottom: 4px solid #28a745;">
-                                <h1 style="color: #ffffff; margin: 0; font-size: 24px; text-transform: uppercase; letter-spacing: 2px;">YouTube Daily Recap</h1>
+                            <td align="center" style="background-color: #343a40; padding: 30px 20px;">
+                                <h1 style="color: #ffffff; margin: 0; font-size: 24px;">YouTube Daily Recap</h1>
                             </td>
                         </tr>
-
                         <tr>
-                            <td style="padding: 30px 20px;">
-                                <h2 style="color: #343a40; font-size: 18px; margin-bottom: 20px; border-left: 4px solid #28a745; padding-left: 10px;">New Videos from Yesterday:</h2>
+                            <td style="padding: 20px;">
+                                <p style="font-size: 16px; color: #666;">
+                                    <strong>Results:</strong> Found {count} new videos from {date_str}.
+                                </p>
+                                <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
     """
 
     for v in videos:
         html_content += f"""
-                                <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom: 25px; border-bottom: 1px solid #eee; padding-bottom: 20px;">
+                                <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom: 25px;">
                                     <tr>
                                         <td width="200" valign="top">
-                                            <a href="{v['url']}" target="_blank" style="display:block; text-decoration:none;">
-                                                <img src="{v['thumb']}" width="180" alt="" style="border-radius: 6px; display: block; border: 1px solid #ddd;">
-                                            </a>
+                                            <img src="{v['thumb']}" width="180" style="border-radius: 6px; border: 1px solid #ddd;">
                                         </td>
                                         <td valign="top" style="padding-left: 15px;">
-                                            <div style="color: #28a745; font-size: 11px; font-weight: bold; text-transform: uppercase; margin-bottom: 4px;">{v['channel']}</div>
-                                            <div style="font-size: 16px; font-weight: 600; line-height: 1.3; margin-bottom: 10px; color: #343a40;">{v['title']}</div>
-                                            <a href="{v['url']}" target="_blank" style="display: inline-block; padding: 7px 14px; background-color: #28a745; color: #ffffff; text-decoration: none; font-size: 12px; border-radius: 4px; font-weight: bold;">Watch Video</a>
+                                            <div style="color: #28a745; font-size: 11px; font-weight: bold;">{v['channel']}</div>
+                                            <div style="font-size: 16px; font-weight: 600; color: #343a40;">{v['title']}</div>
+                                            <a href="{v['url']}" style="display: inline-block; margin-top: 10px; padding: 7px 14px; background-color: #28a745; color: #ffffff; text-decoration: none; border-radius: 4px;">Watch</a>
                                         </td>
                                     </tr>
                                 </table>
         """
 
-    html_content += f"""
-                            </td>
-                        </tr>
-
-                        <tr>
-                            <td align="center" style="background-color: #f8f9fa; padding: 20px; color: #6c757d; font-size: 12px; border-top: 1px solid #dee2e6;">
-                                <p style="margin: 0;">You are receiving this because you subscribed to these channel updates.</p>
-                                <p style="margin: 5px 0 0 0;">&copy; {datetime.datetime.now().year} YouTube Digest Bot. All rights reserved.</p>
+    html_content += """
                             </td>
                         </tr>
                     </table>
@@ -119,12 +133,13 @@ def send_email(videos):
     </html>
     """
 
-    msg.set_content(f"Youtube Recap - {(datetime.datetime.now() - datetime.timedelta(days=1)).strftime('%d.%m.%Y')}")
+    msg.set_content(f"Found {count} videos from yesterday.")
     msg.add_alternative(html_content, subtype='html')
 
     with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
         server.login(EMAIL_USER, EMAIL_PASS)
         server.send_message(msg)
+
 
 if __name__ == '__main__':
     videos_found = fetch_videos()
