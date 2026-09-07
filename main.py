@@ -1,5 +1,6 @@
 import os
 import datetime
+import re
 from googleapiclient.discovery import build
 import smtplib
 from email.message import EmailMessage
@@ -19,10 +20,19 @@ def get_date_bounds():
     return yesterday_date
 
 
+def normalize_title(title):
+    return re.sub(r'\s+', ' ', title).strip().casefold()
+
+
+def is_short_video(title):
+    normalized_title = normalize_title(title)
+    return '#shorts' in normalized_title or '#short' in normalized_title
+
+
 def fetch_videos():
     youtube = build('youtube', 'v3', developerKey=API_KEY)
     yesterday_date = get_date_bounds()
-    all_videos = []
+    candidate_videos = []
     unique_video_ids = set()
 
     if not os.path.exists('channels.txt'):
@@ -65,7 +75,8 @@ def fetch_videos():
 
                 if published_at_dt == yesterday_date:
                     if video_id not in unique_video_ids:
-                        all_videos.append({
+                        candidate_videos.append({
+                            'videoId': video_id,
                             'title': item['snippet']['title'],
                             'url': f"https://www.youtube.com/watch?v={video_id}",
                             'thumb': item['snippet']['thumbnails']['medium']['url'],
@@ -81,6 +92,20 @@ def fetch_videos():
             next_page_token = playlist_response.get('nextPageToken')
             if not next_page_token:
                 break
+
+    all_videos = []
+    unique_titles = set()
+    for video in candidate_videos:
+        if is_short_video(video['title']):
+            continue
+
+        normalized_title = normalize_title(video['title'])
+        if normalized_title in unique_titles:
+            continue
+
+        unique_titles.add(normalized_title)
+        video.pop('videoId')
+        all_videos.append(video)
 
     return all_videos
 
