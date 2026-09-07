@@ -1,6 +1,8 @@
 import os
 import datetime
 import re
+from urllib.parse import urlsplit
+from urllib.request import Request, urlopen
 from googleapiclient.discovery import build
 import smtplib
 from email.message import EmailMessage
@@ -24,9 +26,25 @@ def normalize_title(title):
     return re.sub(r'\s+', ' ', title).strip().casefold()
 
 
-def is_short_video(title, description=''):
+def is_shorts_tab_video(video_id):
+    shorts_url = f'https://www.youtube.com/shorts/{video_id}'
+    request = Request(shorts_url, headers={'User-Agent': 'Mozilla/5.0'})
+
+    try:
+        with urlopen(request, timeout=10) as response:
+            final_path = urlsplit(response.geturl()).path.rstrip('/')
+    except Exception:
+        return False
+
+    return final_path.startswith('/shorts/')
+
+
+def is_short_video(title, description='', video_id=None):
     text = normalize_title(f'{title} {description}')
-    return re.search(r'(?<!\w)#shorts?\b', text) is not None
+    has_shorts_marker = re.search(r'(?<!\w)#shorts?\b', text) is not None
+    return has_shorts_marker or (
+        video_id is not None and is_shorts_tab_video(video_id)
+    )
 
 
 def fetch_videos():
@@ -97,7 +115,7 @@ def fetch_videos():
     all_videos = []
     unique_titles = set()
     for video in candidate_videos:
-        if is_short_video(video['title'], video['description']):
+        if is_short_video(video['title'], video['description'], video['videoId']):
             continue
 
         normalized_title = normalize_title(video['title'])
