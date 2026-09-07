@@ -24,9 +24,9 @@ def normalize_title(title):
     return re.sub(r'\s+', ' ', title).strip().casefold()
 
 
-def is_short_video(title):
-    normalized_title = normalize_title(title)
-    return '#shorts' in normalized_title or '#short' in normalized_title
+def is_short_video(title, description=''):
+    text = normalize_title(f'{title} {description}')
+    return re.search(r'(?<!\w)#shorts?\b', text) is not None
 
 
 def fetch_videos():
@@ -78,6 +78,7 @@ def fetch_videos():
                         candidate_videos.append({
                             'videoId': video_id,
                             'title': item['snippet']['title'],
+                            'description': item['snippet'].get('description', ''),
                             'url': f"https://www.youtube.com/watch?v={video_id}",
                             'thumb': item['snippet']['thumbnails']['medium']['url'],
                             'channel': item['snippet']['channelTitle'],
@@ -96,7 +97,7 @@ def fetch_videos():
     all_videos = []
     unique_titles = set()
     for video in candidate_videos:
-        if is_short_video(video['title']):
+        if is_short_video(video['title'], video['description']):
             continue
 
         normalized_title = normalize_title(video['title'])
@@ -105,6 +106,7 @@ def fetch_videos():
 
         unique_titles.add(normalized_title)
         video.pop('videoId')
+        video.pop('description')
         all_videos.append(video)
 
     return all_videos

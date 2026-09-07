@@ -36,7 +36,7 @@ This is perfect for content curators, marketers, or anyone who wants a daily dig
 ✅ **Automated daily run** – schedule with cron or Task Scheduler.  
 ✅ **YouTube Data API v3** – fetches channel uploads efficiently.  
 ✅ **Duplicate prevention** – ignores repeated video IDs and duplicate titles.
-✅ **Shorts filtering** – excludes videos marked with `#short` or `#shorts`.
+✅ **Shorts filtering** – excludes videos marked with `#short` or `#shorts` in the title or description.
 ✅ **Rich HTML email** – includes thumbnails, titles, channel names, and “Watch Video” buttons.  
 ✅ **Plain text fallback** – for email clients that don’t support HTML.  
 ✅ **Environment variables** – secure storage for API keys and credentials.  
