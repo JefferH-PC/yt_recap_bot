@@ -247,7 +247,7 @@ def fetch_videos():
                             thumbnails.get('high', {}).get('url') or
                             thumbnails.get('default', {}).get('url') or
                             thumbnails.get('standard', {}).get('url') or
-                            ''
+                            f"https://i.ytimg.com/vi/{video_id}/mqdefault.jpg"
                         )
 
                         candidate_videos.append({
@@ -356,7 +356,7 @@ def send_email(videos):
                             <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom: 25px; border-bottom: 1px solid #eee; padding-bottom: 20px;">
                                 <tr>
                                     <td width="200" valign="top">
-                                        <a href="{safe_url}"><img src="{safe_thumb}" width="180" style="border-radius: 6px; border: 1px solid #ddd;" alt="{safe_title}"></a>
+                                        <a href="{safe_url}"><img src="{safe_thumb}" width="180" style="display: block; border-radius: 6px; border: 1px solid #ddd; max-width: 100%; height: auto;" alt="{safe_title}"></a>
                                     </td>
                                     <td valign="top" style="padding-left: 15px;">
                                         <div style="color: #28a745; font-size: 11px; font-weight: bold; text-transform: uppercase;">{safe_channel}</div>
