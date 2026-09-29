@@ -153,10 +153,17 @@ UCUZfhX79dQrJvAgYefiXCCA
 
         self.assertFalse(main.is_shorts_tab_video('test_normal_id'))
 
+    @patch('main.urlopen')
     @patch('smtplib.SMTP_SSL')
-    def test_send_email_escaping_and_content(self, mock_smtp):
+    def test_send_email_escaping_and_content(self, mock_smtp, mock_urlopen):
         mock_server = MagicMock()
         mock_smtp.return_value.__enter__.return_value = mock_server
+
+        mock_resp = MagicMock()
+        mock_resp.status = 200
+        mock_resp.read.return_value = b'test_image_bytes'
+        mock_resp.headers.get_content_type.return_value = 'image/jpeg'
+        mock_urlopen.return_value.__enter__.return_value = mock_resp
 
         sample_videos = [
             {

@@ -314,7 +314,29 @@ def send_email(videos):
 
     videos.sort(key=lambda x: x['publishedAt'], reverse=True)
 
-    # 1. Plain text fallback with full details
+    # 1. Download thumbnails for inline embedding (bypasses email client proxy & ad-blocker blocks)
+    cid_map = {}
+    for i, v in enumerate(videos):
+        cid = f"thumb_{i}"
+        thumb_url = v.get('thumb', '').replace('http://', 'https://')
+        if thumb_url:
+            try:
+                req = Request(thumb_url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
+                with urlopen(req, timeout=5) as resp:
+                    if resp.status == 200:
+                        img_bytes = resp.read()
+                        content_type = resp.headers.get_content_type()
+                        subtype = 'jpeg' if ('jpeg' in content_type or 'jpg' in content_type) else 'png'
+                        cid_map[v['url']] = (cid, img_bytes, subtype)
+            except Exception as e:
+                logger.debug(f"Could not download thumbnail for inline embedding ({thumb_url}): {e}")
+                if hasattr(e, 'close'):
+                    try:
+                        e.close()
+                    except Exception:
+                        pass
+
+    # 2. Plain text fallback with full details
     plain_lines = [
         f"YouTube Daily Recap - {date_display}",
         f"{count} video(s) found from {date_display}.\n"
@@ -325,7 +347,7 @@ def send_email(videos):
     plain_content = "\n".join(plain_lines)
     msg.set_content(plain_content)
 
-    # 2. Rich HTML email template
+    # 3. Rich HTML email template
     html_content = f"""<!DOCTYPE html>
 <html lang="en">
 <body style="margin: 0; padding: 0; background-color: #f4f4f4; font-family: Arial, sans-serif;">
@@ -350,13 +372,17 @@ def send_email(videos):
         safe_title = html.escape(v['title'])
         safe_channel = html.escape(v['channel'])
         safe_url = html.escape(v['url'])
-        safe_thumb = html.escape(v['thumb'])
+        # Use CID inline reference if downloaded, else fallback to safe external HTTPS URL
+        if v['url'] in cid_map:
+            img_src = f"cid:{cid_map[v['url']][0]}"
+        else:
+            img_src = html.escape(v['thumb'].replace('http://', 'https://'))
 
         html_content += f"""
                             <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom: 25px; border-bottom: 1px solid #eee; padding-bottom: 20px;">
                                 <tr>
                                     <td width="200" valign="top">
-                                        <a href="{safe_url}"><img src="{safe_thumb}" width="180" style="display: block; border-radius: 6px; border: 1px solid #ddd; max-width: 100%; height: auto;" alt="{safe_title}"></a>
+                                        <a href="{safe_url}"><img src="{img_src}" width="180" style="display: block; border-radius: 6px; border: 1px solid #ddd; max-width: 100%; height: auto;" alt="Thumbnail"></a>
                                     </td>
                                     <td valign="top" style="padding-left: 15px;">
                                         <div style="color: #28a745; font-size: 11px; font-weight: bold; text-transform: uppercase;">{safe_channel}</div>
@@ -379,6 +405,12 @@ def send_email(videos):
 """
 
     msg.add_alternative(html_content, subtype='html')
+
+    # Attach inline CID images to the HTML body
+    html_part = msg.get_body(preferencelist=('html',))
+    if html_part:
+        for cid, img_bytes, subtype in cid_map.values():
+            html_part.add_related(img_bytes, 'image', subtype, cid=f"<{cid}>")
 
     try:
         with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=30) as server:
