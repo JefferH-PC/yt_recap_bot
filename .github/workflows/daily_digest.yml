@@ -20,13 +20,12 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install google-api-python-client requests
+          pip install -r requirements.txt
 
       - name: Run automation script
         env:
-          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
           EMAIL_USER: ${{ secrets.EMAIL_USER }}
           EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
-          RECIPIENT_EMAIL: ${{ secrets.EMAIL_USER }}
+          RECIPIENT_EMAIL: ${{ secrets.RECIPIENT_EMAIL || secrets.EMAIL_USER }}
         run: python main.py

@@ -48,10 +48,9 @@ This is perfect for content curators, marketers, or anyone who wants a daily dig
 
 Before you begin, ensure you have the following:
 
-- **Python 3.7+** installed on your system.
+- **Python 3.9+** installed on your system.
 - A **Google Cloud Project** with the **YouTube Data API v3** enabled and an **API key**.
-- A **Gmail account** (or any SMTP server) for sending emails.
-- **Less secure app access** turned **ON** for Gmail (or use an App Password if 2FA is enabled).
+- A **Gmail account** (or any SMTP provider) with an **App Password** (Note: Google discontinued "Less secure apps" access; an App Password generated with 2-Step Verification is required for Gmail SMTP).
 
 ---
 
@@ -60,11 +59,23 @@ Before you begin, ensure you have the following:
 1. **Clone this repository:**
    ```bash
    git clone https://github.com/JefferH-PC/yt_recap_bot.git
-2. **Install required Python packages:**
+   cd yt_recap_bot
+   ```
+2. **Create and activate a virtual environment:**
    ```bash
-   pip install google-api-python-client
-3. **Update "channels.txt" with the channels you want.**
-4. **Set up environment variables**
+   python -m venv .venv
+   # On Linux/macOS:
+   source .venv/bin/activate
+   # On Windows:
+   .venv\Scripts\activate
+   ```
+3. **Install required dependencies:**
+   ```bash
+   pip install -r requirements.txt
+   ```
+4. **Update `channels.txt` with the channels you want.** (Supports `#` comments and empty lines).
+5. **Set up environment variables:**
+   Copy `.env.example` to `.env` and fill in your credentials.
 
 ---
 
@@ -74,40 +85,43 @@ Before you begin, ensure you have the following:
 - Go to [Google Cloud Console](https://console.cloud.google.com/).
 - Create a new project (or select an existing one).
 - Enable **YouTube Data API v3**.
-- Create an **API key** and restrict it to the YouTube API.
+- Create an **API key** under Credentials and optionally restrict it to the YouTube API.
 - Copy the key.
 
 ### 2. Email Credentials
-- Use a Gmail account (or any SMTP server that supports SSL).
-- If you use **2‑Factor Authentication**, generate an **App Password**.
-- For plain Gmail without 2FA, enable **“Allow less secure apps”** (not recommended).
+- For Gmail: Enable **2-Step Verification** on your Google Account, then generate an **App Password** (under Security > 2-Step Verification > App Passwords).
+- Use this 16-character App Password as your `EMAIL_PASS`.
 
 ### 3. Environment Variables
-Set the following environment variables in your shell or in a `.env` file (if you use `python-dotenv`):
+Set the following environment variables in your shell, CI runner secrets, or a local `.env` file:
 
-| Variable          | Description                                   |
-|-------------------|-----------------------------------------------|
-| `YOUTUBE_API_KEY` | Your YouTube Data API v3 key.                 |
-| `EMAIL_USER`      | The email address used to send the digest.    |
-| `EMAIL_PASS`      | The password or app password for that email.  |
-| `RECIPIENT_EMAIL` | The email address to receive the digest (optional; if not set, it defaults to `EMAIL_USER`). |
+| Variable           | Description                                                                              | Default            |
+|--------------------|------------------------------------------------------------------------------------------|--------------------|
+| `YOUTUBE_API_KEY`  | Your YouTube Data API v3 key. *(Required)*                                               | —                  |
+| `EMAIL_USER`       | The sender email address. *(Required)*                                                   | —                  |
+| `EMAIL_PASS`       | The sender email password or App Password. *(Required)*                                  | —                  |
+| `RECIPIENT_EMAIL`  | The recipient email address. *(Defaults to the same as `EMAIL_USER` if not specified)*   | `EMAIL_USER`       |
+| `SMTP_HOST`        | SMTP host server. *(Optional)*                                                           | `smtp.gmail.com`   |
+| `SMTP_PORT`        | SMTP SSL port. *(Optional)*                                                              | `465`              |
+| `TIMEZONE`         | Timezone name for calculating "yesterday" (e.g. `UTC`, `America/Sao_Paulo`). *(Optional)* | `UTC`              |
+| `SEND_EMPTY_EMAIL` | Whether to send an email when 0 videos were uploaded yesterday (`true`/`false`).         | `false`            |
+| `CHANNELS_FILE`    | Custom path to channels list file. *(Optional)*                                          | `channels.txt`     |
 
 ---
 
 ## Customization
 
 ### Email Subject & Content
-- To change the email subject, modify the `msg['Subject']` line in the `send_email()` function.
-- The HTML template is embedded directly in the script. You can edit the `html_content` variable to change colors, fonts, or layout.
+- To change the email subject, modify the `msg['Subject']` line in `send_email()`.
+- The HTML email template is embedded in `send_email()`. You can customize styles, colors, or fonts.
+- Dynamic values (titles, channel names, URLs) are securely HTML-escaped.
+- A full plain-text fallback summary is included for notification previews and text-only email clients.
 
 ### Time Zone
-The script uses the system’s local time to determine “yesterday”. If you want a specific timezone, modify the `get_date_bounds()` function using `pytz`.
+The script defaults to `UTC`. To align with your local time, set the `TIMEZONE` environment variable (e.g. `TIMEZONE=America/New_York` or `TIMEZONE=America/Sao_Paulo`).
 
 ### Add More Channels Dynamically
-You can edit `channels.txt` at any time; the script reads it fresh on each run.
-
-### Support for Other SMTP Providers
-Replace the SMTP server and port in the `send_email()` function.
+Edit `channels.txt` at any time; the script reads it fresh on each run. You can organize your list with `#` comments and sections.
 
 ---
 
@@ -115,14 +129,16 @@ Replace the SMTP server and port in the `send_email()` function.
 
 | Issue | Possible Solution |
 |-------|-------------------|
-| **`channels.txt not found`** | Ensure the file exists in the same directory as `main.py`. |
-| **No videos found** | Check that the channels have uploaded videos yesterday. Also verify the channel IDs are correct. |
-| **`API key invalid`** | Make sure the `YOUTUBE_API_KEY` environment variable is set and the API is enabled. |
-| **Email not sent** | Check your email credentials; if using Gmail, ensure “Allow less secure apps” is **ON** or use an App Password. |
-| **`SMTPAuthenticationError`** | Double‑check your email password/app password. |
-| **Rate limiting** | The script uses pagination and respects quota; if you exceed the daily quota, wait until the next day. |
+| **`Missing required environment variables`** | Ensure `YOUTUBE_API_KEY`, `EMAIL_USER`, and `EMAIL_PASS` are defined in your environment or `.env`. |
+| **`channels.txt not found`** | Ensure `channels.txt` is located in the project directory or set `CHANNELS_FILE` to its absolute path. |
+| **No videos found** | Verify that channels posted regular videos (non-Shorts) yesterday. The script checks `UTC` dates by default. |
+| **`SMTPAuthenticationError`** | For Gmail, ensure you are using an **App Password** (not your standard Google account password). Verify 2-Step Verification is active. |
+| **Rate limiting / Quota** | The script batches channel requests (50 per API call) to preserve your daily 10,000 unit quota. |
 
-For detailed error logs, run the script from the terminal to see print statements.
+Run the script from the terminal to see structured logs and status updates:
+```bash
+python main.py
+```
 
 ---
 
